@@ -6,3 +6,4 @@ sentence-transformers==2.6.1
 transformers==4.38.2
 torch>=2.2.0
 faiss-cpu==1.7.4
+pypdf==4.2.0
