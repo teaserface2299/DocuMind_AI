@@ -10,10 +10,13 @@ import streamlit as st
 # --------------------------
 
 HF_TOKEN = st.secrets["HF_TOKEN"]
-API_URL = "https://api-inference.huggingface.co/models/google/flan-t5-large"
+
+# ✅ UPDATED ENDPOINT (MANDATORY)
+API_URL = "https://router.huggingface.co/hf-inference/models/google/flan-t5-large"
 
 headers = {
-    "Authorization": f"Bearer {HF_TOKEN}"
+    "Authorization": f"Bearer {HF_TOKEN}",
+    "Content-Type": "application/json"
 }
 
 # --------------------------
@@ -21,7 +24,6 @@ headers = {
 # --------------------------
 
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
-
 
 # --------------------------
 # Document Loader
@@ -33,7 +35,9 @@ def load_document(file):
         reader = PdfReader(file)
         text = ""
         for page in reader.pages:
-            text += page.extract_text() + "\n"
+            extracted = page.extract_text()
+            if extracted:
+                text += extracted + "\n"
         return text
 
     elif file.name.endswith(".txt"):
@@ -41,7 +45,6 @@ def load_document(file):
 
     else:
         return ""
-
 
 # --------------------------
 # Text Chunking
@@ -53,7 +56,6 @@ def chunk_text(text, chunk_size=500):
     for i in range(0, len(text), chunk_size):
         chunks.append(text[i:i + chunk_size])
     return chunks
-
 
 # --------------------------
 # Vector Store Creation
@@ -68,7 +70,6 @@ def create_vector_store(chunks):
     index.add(np.array(embeddings))
 
     return index, chunks
-
 
 # --------------------------
 # LLM Query
@@ -91,11 +92,14 @@ def query_llm(prompt):
 
     result = response.json()
 
+    # Handle HF error response
+    if isinstance(result, dict) and "error" in result:
+        return f"Model error: {result['error']}"
+
     if isinstance(result, list):
         return result[0].get("generated_text", "No response generated.")
 
     return str(result)
-
 
 # --------------------------
 # Main QA Function
