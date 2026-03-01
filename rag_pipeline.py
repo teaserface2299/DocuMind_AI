@@ -40,7 +40,7 @@ def create_qa_system(file_path, file_type):
 
     # HuggingFace API client
     client = InferenceClient(
-        model="HuggingFaceH4/zephyr-7b-beta",
+        model="mistralai/Mistral-7B-Instruct-v0.2",
         token=os.environ["HF_TOKEN"],
     )
 
