@@ -1,42 +1,33 @@
-# 💬 InsightRAG – AI Knowledge Assistant
+# 🧠 DocuMind AI
 
-InsightRAG is a Retrieval-Augmented Generation (RAG) based AI assistant that allows users to upload PDF or TXT documents and chat with them intelligently.
-
-Built using:
-- Streamlit
-- LangChain
-- FAISS
-- HuggingFace Transformers
-- TinyLlama (Local LLM)
+**DocuMind AI** is an advanced Retrieval-Augmented Generation (RAG) platform that allows users to have intelligent, context-aware conversations with their documents. Powered by **Google Gemini 2.5 Flash** and **LangChain**, it transforms static PDFs and text files into interactive knowledge bases.
 
 ---
 
-## 🚀 Features
+## 🚀 Key Features
 
-- Upload PDF or TXT documents
-- Intelligent context-based question answering
-- Retrieval-Augmented Generation (RAG)
-- Multi-session chat support
-- Source document preview
-- Fully local LLM (No OpenAI API required)
-- Question limit per session (7 questions)
+* **Multi-Session Chat:** ChatGPT-style sidebar to manage multiple document conversations simultaneously.
+* **High-Speed RAG:** Uses `FAISS` vector storage and `HuggingFace` embeddings for near-instant retrieval.
+* **Smart Memory Purge:** Automatically clears all session data every 15 minutes to ensure privacy and peak performance.
+* **Contextual Guardrails:** The AI is strictly limited to answering based on the uploaded document.
+* **Source Transparency:** View the exact snippets of text the AI used to generate its answer.
 
 ---
 
-## 🧠 How It Works
+## 🛠️ Tech Stack
 
-1. Document is uploaded
-2. Text is split into chunks
-3. Embeddings are created using `all-MiniLM-L6-v2`
-4. FAISS vector store is built
-5. TinyLlama generates answers using retrieved context
+* **Frontend:** Streamlit
+* **LLM:** Google Gemini 2.5 Flash
+* **Framework:** LangChain
+* **Vector Database:** FAISS (Facebook AI Similarity Search)
+* **Embeddings:** HuggingFace (`all-MiniLM-L6-v2`)
+* **Document Parsing:** PyPDFLoader & TextLoader
 
 ---
 
-## 🛠 Installation
+## ⚙️ Installation & Setup
 
-### 1️⃣ Clone Repository
-
+### 1. Clone the Repository
 ```bash
-git clone https://github.com/yourusername/InsightRAG.git
-cd InsightRAG
+git clone [https://github.com/your-username/documind-ai.git](https://github.com/your-username/documind-ai.git)
+cd documind-ai
