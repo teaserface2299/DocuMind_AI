@@ -1,132 +1,89 @@
-import faiss
-import numpy as np
-import requests
-from sentence_transformers import SentenceTransformer
-from PyPDF2 import PdfReader
 import streamlit as st
+import google.generativeai as genai
 
-# --------------------------
-# HuggingFace Setup
-# --------------------------
+from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_community.vectorstores import FAISS
+from langchain_community.document_loaders import TextLoader, PyPDFLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-HF_TOKEN = st.secrets["HF_TOKEN"]
 
-# ✅ UPDATED ENDPOINT (MANDATORY)
-API_URL = "https://router.huggingface.co/hf-inference/models/google/flan-t5-large"
+# -----------------------------
+# Gemini Configuration
+# -----------------------------
+GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
+genai.configure(api_key=GEMINI_API_KEY)
 
-headers = {
-    "Authorization": f"Bearer {HF_TOKEN}",
-    "Content-Type": "application/json"
-}
+model = genai.GenerativeModel("gemini-1.5-flash")
 
-# --------------------------
-# Embedding Model
-# --------------------------
 
-embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
+# -----------------------------
+# CREATE QA SYSTEM FUNCTION
+# -----------------------------
+def create_qa_system(file_path, file_type):
 
-# --------------------------
-# Document Loader
-# --------------------------
-
-def load_document(file):
-
-    if file.name.endswith(".pdf"):
-        reader = PdfReader(file)
-        text = ""
-        for page in reader.pages:
-            extracted = page.extract_text()
-            if extracted:
-                text += extracted + "\n"
-        return text
-
-    elif file.name.endswith(".txt"):
-        return file.read().decode("utf-8")
-
+    # Load document
+    if file_type.lower() == "pdf":
+        loader = PyPDFLoader(file_path)
     else:
-        return ""
+        loader = TextLoader(file_path, encoding="utf-8")
 
-# --------------------------
-# Text Chunking
-# --------------------------
+    documents = loader.load()
 
-def chunk_text(text, chunk_size=500):
+    if not documents:
+        raise ValueError("No content extracted from file.")
 
-    chunks = []
-    for i in range(0, len(text), chunk_size):
-        chunks.append(text[i:i + chunk_size])
-    return chunks
+    # Split document
+    splitter = RecursiveCharacterTextSplitter(
+        chunk_size=1000,
+        chunk_overlap=200,
+    )
 
-# --------------------------
-# Vector Store Creation
-# --------------------------
+    docs = splitter.split_documents(documents)
+    docs = [doc for doc in docs if doc.page_content.strip()]
 
-def create_vector_store(chunks):
+    if len(docs) == 0:
+        raise ValueError("Document has no valid text content.")
 
-    embeddings = embedding_model.encode(chunks)
+    # Embeddings
+    embeddings = HuggingFaceEmbeddings(
+        model_name="sentence-transformers/all-MiniLM-L6-v2"
+    )
 
-    dimension = embeddings.shape[1]
-    index = faiss.IndexFlatL2(dimension)
-    index.add(np.array(embeddings))
+    vectorstore = FAISS.from_documents(docs, embeddings)
 
-    return index, chunks
+    # Question function
+    def ask_question(question, chat_history):
 
-# --------------------------
-# LLM Query
-# --------------------------
+        retrieved_docs = vectorstore.similarity_search(question, k=5)
 
-def query_llm(prompt):
+        context = "\n\n".join(
+            [doc.page_content for doc in retrieved_docs]
+        )
 
-    payload = {
-        "inputs": prompt,
-        "parameters": {
-            "max_new_tokens": 300,
-            "temperature": 0.7
-        }
-    }
+        history_text = ""
+        for q, a in chat_history:
+            history_text += f"User: {q}\nAssistant: {a}\n"
 
-    response = requests.post(API_URL, headers=headers, json=payload)
+        prompt = f"""
+You are a helpful AI assistant.
 
-    if response.status_code != 200:
-        return f"Model error: {response.text}"
+Answer clearly in at least two paragraphs.
+Use ONLY the given context.
+If answer not found, say clearly.
 
-    result = response.json()
-
-    # Handle HF error response
-    if isinstance(result, dict) and "error" in result:
-        return f"Model error: {result['error']}"
-
-    if isinstance(result, list):
-        return result[0].get("generated_text", "No response generated.")
-
-    return str(result)
-
-# --------------------------
-# Main QA Function
-# --------------------------
-
-def ask_question(question, index, chunks):
-
-    question_embedding = embedding_model.encode([question])
-
-    D, I = index.search(np.array(question_embedding), k=3)
-
-    retrieved_chunks = [chunks[i] for i in I[0]]
-
-    context = "\n\n".join(retrieved_chunks)
-
-    prompt = f"""
-Answer the question based only on the context below.
+Previous Conversation:
+{history_text}
 
 Context:
 {context}
 
 Question:
 {question}
-
-Answer:
 """
 
-    answer = query_llm(prompt)
+        response = model.generate_content(prompt)
+        answer = response.text
 
-    return answer, retrieved_chunks
+        return answer, retrieved_docs
+
+    return ask_question
