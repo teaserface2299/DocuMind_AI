@@ -45,7 +45,8 @@ def create_qa_system(file_path, file_type):
 
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
-        torch_dtype=torch.float16 if torch.cuda.is_available() else torch.float32
+        torch_dtype=torch.float32,   # force CPU safe
+        low_cpu_mem_usage=True
     )
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
@@ -56,7 +57,7 @@ def create_qa_system(file_path, file_type):
         model=model,
         tokenizer=tokenizer,
         device=0 if torch.cuda.is_available() else -1,
-        max_new_tokens=500,
+        max_new_tokens=250,
         temperature=0.7,
         do_sample=True,
     )
