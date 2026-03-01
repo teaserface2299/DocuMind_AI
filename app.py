@@ -79,7 +79,7 @@ if st.session_state.current_session:
 else:
     st.info("Create a new session and upload a document to start chatting.")
 
-# Create new session when file uploaded
+# Create new session
 if uploaded_file and not st.session_state.current_session:
 
     file_type = uploaded_file.name.split(".")[-1]
@@ -104,12 +104,5 @@ if uploaded_file and not st.session_state.current_session:
     st.session_state.current_session = session_id
     st.rerun()
 
-# Footer
 st.markdown("---")
-st.markdown(
-    """
-**Created by:** Yaswanth Dammalapati  
-AI & ML Engineer | Data Scientist  
-🔗 LinkedIn: https://www.linkedin.com/in/yaswanth-dammalapati-32091b206/
-"""
-)
+st.markdown("Created by Yaswanth Dammalapati")
