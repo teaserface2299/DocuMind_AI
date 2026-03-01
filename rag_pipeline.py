@@ -6,14 +6,14 @@ from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import TextLoader, PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-
 # -----------------------------
 # Gemini Configuration
 # -----------------------------
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 genai.configure(api_key=GEMINI_API_KEY)
 
-model = genai.GenerativeModel("models/gemini-1.5-flash-latest")
+# FIXED: Removed the "models/" prefix and the "-latest" tag
+model = genai.GenerativeModel("gemini-1.5-flash")
 
 # -----------------------------
 # CREATE QA SYSTEM FUNCTION
@@ -79,7 +79,6 @@ Context:
 Question:
 {question}
 """
-
         response = model.generate_content(prompt)
         answer = response.text
 
