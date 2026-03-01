@@ -69,11 +69,13 @@ with st.sidebar:
 # -----------------------------
 # MAIN CONTENT
 # -----------------------------
-st.title("InsightRAG - Knowledge Assistant")
+st.title("DocuMIND AI - Knowledge Assistant")
 
 # CASE 1: No active session selected -> Show File Uploader
 if st.session_state.current_session_id is None:
     st.info("👋 Welcome! Please upload a PDF or TXT file to start a new chat session.")
+    st.info("only text files are supported...dont uplaod any image pdf files")
+
     uploaded_file = st.file_uploader("Upload document", type=["pdf", "txt"])
 
     if uploaded_file:
