@@ -1,86 +1,50 @@
 import streamlit as st
 import google.generativeai as genai
-
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
 from langchain_community.document_loaders import TextLoader, PyPDFLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 
-# -----------------------------
 # Gemini Configuration
-# -----------------------------
 GEMINI_API_KEY = st.secrets["GEMINI_API_KEY"]
 genai.configure(api_key=GEMINI_API_KEY)
-
-# FIXED: Removed the "models/" prefix and the "-latest" tag
 model = genai.GenerativeModel("gemini-2.5-flash")
-# -----------------------------
-# CREATE QA SYSTEM FUNCTION
-# -----------------------------
-def create_qa_system(file_path, file_type):
 
-    # Load document
+def create_qa_system(file_path, file_type):
     if file_type.lower() == "pdf":
         loader = PyPDFLoader(file_path)
     else:
         loader = TextLoader(file_path, encoding="utf-8")
 
     documents = loader.load()
-
-    if not documents:
-        raise ValueError("No content extracted from file.")
-
-    # Split document
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=1000,
-        chunk_overlap=200,
-    )
-
+    splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     docs = splitter.split_documents(documents)
-    docs = [doc for doc in docs if doc.page_content.strip()]
-
-    if len(docs) == 0:
-        raise ValueError("Document has no valid text content.")
-
-    # Embeddings
-    embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2"
-    )
-
+    
+    embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
     vectorstore = FAISS.from_documents(docs, embeddings)
 
-    # Question function
     def ask_question(question, chat_history):
-
         retrieved_docs = vectorstore.similarity_search(question, k=5)
-
-        context = "\n\n".join(
-            [doc.page_content for doc in retrieved_docs]
-        )
-
+        context = "\n\n".join([doc.page_content for doc in retrieved_docs])
+        
         history_text = ""
         for q, a in chat_history:
             history_text += f"User: {q}\nAssistant: {a}\n"
 
         prompt = f"""
-You are a helpful AI assistant.
+        You are a helpful AI assistant. Answer clearly in at least two paragraphs.
+        Use ONLY the given context. If not found, say so.
+        
+        Previous Conversation:
+        {history_text}
 
-Answer clearly in at least two paragraphs.
-Use ONLY the given context.
-If answer not found, say clearly.
+        Context:
+        {context}
 
-Previous Conversation:
-{history_text}
-
-Context:
-{context}
-
-Question:
-{question}
-"""
+        Question:
+        {question}
+        """
         response = model.generate_content(prompt)
-        answer = response.text
-
-        return answer, retrieved_docs
+        return response.text, retrieved_docs
 
     return ask_question
