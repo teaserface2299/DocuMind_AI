@@ -1,88 +1,118 @@
-import os
+import faiss
+import numpy as np
 import requests
-import time
+from sentence_transformers import SentenceTransformer
+from PyPDF2 import PdfReader
+import streamlit as st
 
-from langchain_community.embeddings import HuggingFaceEmbeddings
-from langchain_community.vectorstores import FAISS
-from langchain_community.document_loaders import TextLoader, PyPDFLoader
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+# --------------------------
+# HuggingFace Setup
+# --------------------------
+
+HF_TOKEN = st.secrets["HF_TOKEN"]
+API_URL = "https://api-inference.huggingface.co/models/google/flan-t5-large"
+
+headers = {
+    "Authorization": f"Bearer {HF_TOKEN}"
+}
+
+# --------------------------
+# Embedding Model
+# --------------------------
+
+embedding_model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
-def create_qa_system(file_path, file_type):
+# --------------------------
+# Document Loader
+# --------------------------
 
-    # Load document
-    if file_type.lower() == "pdf":
-        loader = PyPDFLoader(file_path)
+def load_document(file):
+
+    if file.name.endswith(".pdf"):
+        reader = PdfReader(file)
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text() + "\n"
+        return text
+
+    elif file.name.endswith(".txt"):
+        return file.read().decode("utf-8")
+
     else:
-        loader = TextLoader(file_path, encoding="utf-8")
+        return ""
 
-    documents = loader.load()
 
-    splitter = RecursiveCharacterTextSplitter(
-        chunk_size=800,
-        chunk_overlap=150,
-    )
+# --------------------------
+# Text Chunking
+# --------------------------
 
-    docs = splitter.split_documents(documents)
-    docs = [doc for doc in docs if doc.page_content.strip()]
+def chunk_text(text, chunk_size=500):
 
-    embeddings = HuggingFaceEmbeddings(
-        model_name="sentence-transformers/all-MiniLM-L6-v2"
-    )
+    chunks = []
+    for i in range(0, len(text), chunk_size):
+        chunks.append(text[i:i + chunk_size])
+    return chunks
 
-    vectorstore = FAISS.from_documents(docs, embeddings)
 
-    API_URL = "https://api-inference.huggingface.co/models/microsoft/Phi-3-mini-4k-instruct"
-    headers = {
-        "Authorization": f"Bearer {os.environ['HF_TOKEN']}"
+# --------------------------
+# Vector Store Creation
+# --------------------------
+
+def create_vector_store(chunks):
+
+    embeddings = embedding_model.encode(chunks)
+
+    dimension = embeddings.shape[1]
+    index = faiss.IndexFlatL2(dimension)
+    index.add(np.array(embeddings))
+
+    return index, chunks
+
+
+# --------------------------
+# LLM Query
+# --------------------------
+
+def query_llm(prompt):
+
+    payload = {
+        "inputs": prompt,
+        "parameters": {
+            "max_new_tokens": 300,
+            "temperature": 0.7
+        }
     }
 
-    def query_llm(prompt):
+    response = requests.post(API_URL, headers=headers, json=payload)
 
-        payload = {
-            "inputs": prompt,
-            "parameters": {
-                "max_new_tokens": 300,
-                "temperature": 0.7,
-                "return_full_text": False
-            }
-        }
+    if response.status_code != 200:
+        return f"Model error: {response.text}"
 
-        response = requests.post(API_URL, headers=headers, json=payload)
-        result = response.json()
+    result = response.json()
 
-        # Handle model loading case
-        if isinstance(result, dict) and "estimated_time" in result:
-            time.sleep(result["estimated_time"])
-            response = requests.post(API_URL, headers=headers, json=payload)
-            result = response.json()
+    if isinstance(result, list):
+        return result[0].get("generated_text", "No response generated.")
 
-        if isinstance(result, list):
-            return result[0]["generated_text"]
+    return str(result)
 
-        return "Model is currently unavailable. Please try again."
 
-    def ask_question(question, chat_history):
+# --------------------------
+# Main QA Function
+# --------------------------
 
-        retrieved_docs = vectorstore.similarity_search(question, k=4)
+def ask_question(question, index, chunks):
 
-        context = "\n\n".join(
-            [doc.page_content for doc in retrieved_docs]
-        )
+    question_embedding = embedding_model.encode([question])
 
-        history_text = ""
-        for q, a in chat_history:
-            history_text += f"User: {q}\nAssistant: {a}\n"
+    D, I = index.search(np.array(question_embedding), k=3)
 
-        prompt = f"""
-You are a helpful AI assistant.
+    retrieved_chunks = [chunks[i] for i in I[0]]
 
-Answer clearly in at least two paragraphs.
-Use ONLY the provided context.
-If answer is not found, clearly say so.
+    context = "\n\n".join(retrieved_chunks)
 
-Previous Conversation:
-{history_text}
+    prompt = f"""
+Answer the question based only on the context below.
 
 Context:
 {context}
@@ -93,8 +123,6 @@ Question:
 Answer:
 """
 
-        answer = query_llm(prompt)
+    answer = query_llm(prompt)
 
-        return answer.strip(), retrieved_docs
-
-    return ask_question
+    return answer, retrieved_chunks
