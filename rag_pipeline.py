@@ -1,5 +1,6 @@
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+import os
+import requests
+import time
 
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
@@ -25,35 +26,41 @@ def create_qa_system(file_path, file_type):
     docs = splitter.split_documents(documents)
     docs = [doc for doc in docs if doc.page_content.strip()]
 
-    # Embeddings (lightweight)
     embeddings = HuggingFaceEmbeddings(
         model_name="sentence-transformers/all-MiniLM-L6-v2"
     )
 
     vectorstore = FAISS.from_documents(docs, embeddings)
 
-    # 🔥 Load TinyLlama in low-memory mode
-    model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+    API_URL = "https://api-inference.huggingface.co/models/microsoft/Phi-3-mini-4k-instruct"
+    headers = {
+        "Authorization": f"Bearer {os.environ['HF_TOKEN']}"
+    }
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    def query_llm(prompt):
 
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        torch_dtype=torch.float16,   # reduce memory
-        low_cpu_mem_usage=True
-    )
+        payload = {
+            "inputs": prompt,
+            "parameters": {
+                "max_new_tokens": 300,
+                "temperature": 0.7,
+                "return_full_text": False
+            }
+        }
 
-    model.eval()
+        response = requests.post(API_URL, headers=headers, json=payload)
+        result = response.json()
 
-    pipe = pipeline(
-        "text-generation",
-        model=model,
-        tokenizer=tokenizer,
-        device=-1,  # force CPU
-        max_new_tokens=250,
-        temperature=0.7,
-        do_sample=True,
-    )
+        # Handle model loading case
+        if isinstance(result, dict) and "estimated_time" in result:
+            time.sleep(result["estimated_time"])
+            response = requests.post(API_URL, headers=headers, json=payload)
+            result = response.json()
+
+        if isinstance(result, list):
+            return result[0]["generated_text"]
+
+        return "Model is currently unavailable. Please try again."
 
     def ask_question(question, chat_history):
 
@@ -70,9 +77,9 @@ def create_qa_system(file_path, file_type):
         prompt = f"""
 You are a helpful AI assistant.
 
-Answer clearly in at least two full paragraphs.
+Answer clearly in at least two paragraphs.
 Use ONLY the provided context.
-If answer is not found, say clearly.
+If answer is not found, clearly say so.
 
 Previous Conversation:
 {history_text}
@@ -86,12 +93,8 @@ Question:
 Answer:
 """
 
-        with torch.no_grad():
-            result = pipe(prompt)
+        answer = query_llm(prompt)
 
-        full_output = result[0]["generated_text"]
-        answer = full_output.replace(prompt, "").strip()
-
-        return answer, retrieved_docs
+        return answer.strip(), retrieved_docs
 
     return ask_question
