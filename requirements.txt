@@ -3,8 +3,10 @@ langchain==0.1.20
 langchain-core==0.1.52
 langchain-community==0.0.38
 sentence-transformers==2.6.1
+torch>=2.0.0
 faiss-cpu==1.13.2
+numpy
 pypdf
-requests
-huggingface_hub
 PyPDF2
+google-generativeai
+requests
