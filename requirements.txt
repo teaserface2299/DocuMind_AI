@@ -5,4 +5,5 @@ langchain-community==0.0.38
 sentence-transformers==2.6.1
 transformers==4.38.2
 torch>=2.2.0
-faiss-cpu==1.7.4
+faiss-cpu==1.13.2
+pypdf
