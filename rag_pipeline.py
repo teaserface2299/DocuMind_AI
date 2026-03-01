@@ -46,7 +46,6 @@ def create_qa_system(file_path, file_type):
     model = AutoModelForCausalLM.from_pretrained(
         model_name,
         torch_dtype=torch.float32,   # force CPU safe
-        low_cpu_mem_usage=True
     )
 
     device = "cuda" if torch.cuda.is_available() else "cpu"
