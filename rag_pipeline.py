@@ -1,5 +1,5 @@
 import os
-from huggingface_hub import InferenceClient
+import requests
 
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
@@ -31,18 +31,12 @@ def create_qa_system(file_path, file_type):
     if len(docs) == 0:
         raise ValueError("Document has no valid text content.")
 
-    # Embeddings
+    # Create embeddings
     embeddings = HuggingFaceEmbeddings(
         model_name="sentence-transformers/all-MiniLM-L6-v2"
     )
 
     vectorstore = FAISS.from_documents(docs, embeddings)
-
-    # HuggingFace API client
-    client = InferenceClient(
-        model="mistralai/Mistral-7B-Instruct-v0.2",
-        token=os.environ["HF_TOKEN"],
-    )
 
     def ask_question(question, chat_history):
 
@@ -60,8 +54,8 @@ def create_qa_system(file_path, file_type):
 You are a helpful AI assistant.
 
 Use ONLY the context below to answer.
-If the answer is not found, say:
-"I could not find the answer in the document."
+If the answer is not in the context, say:
+"I could not find the answer in the provided document."
 
 Previous Conversation:
 {history_text}
@@ -75,13 +69,28 @@ Question:
 Answer:
 """
 
-        response = client.text_generation(
-            prompt,
-            max_new_tokens=300,
-            temperature=0.7,
-        )
+        API_URL = "https://api-inference.huggingface.co/models/google/gemma-2b-it"
 
-        answer = response.strip()
+        headers = {
+            "Authorization": f"Bearer {os.environ['HF_TOKEN']}"
+        }
+
+        payload = {
+            "inputs": prompt,
+            "parameters": {
+                "max_new_tokens": 300,
+                "temperature": 0.7
+            }
+        }
+
+        response = requests.post(API_URL, headers=headers, json=payload)
+        result = response.json()
+
+        if isinstance(result, list):
+            answer = result[0]["generated_text"]
+            answer = answer.replace(prompt, "").strip()
+        else:
+            answer = "Error generating response."
 
         return answer, retrieved_docs
 
