@@ -1,5 +1,5 @@
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, pipeline
+import os
+from huggingface_hub import InferenceClient
 
 from langchain_community.embeddings import HuggingFaceEmbeddings
 from langchain_community.vectorstores import FAISS
@@ -31,37 +31,19 @@ def create_qa_system(file_path, file_type):
     if len(docs) == 0:
         raise ValueError("Document has no valid text content.")
 
-    # Create vector store
+    # Embeddings
     embeddings = HuggingFaceEmbeddings(
         model_name="sentence-transformers/all-MiniLM-L6-v2"
     )
 
     vectorstore = FAISS.from_documents(docs, embeddings)
 
-    # Load TinyLlama
-    model_name = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-
-    model = AutoModelForCausalLM.from_pretrained(
-        model_name,
-        torch_dtype=torch.float32,   # force CPU safe
+    # HuggingFace API client
+    client = InferenceClient(
+        model="HuggingFaceH4/zephyr-7b-beta",
+        token=os.environ["HF_TOKEN"],
     )
 
-    device = "cuda" if torch.cuda.is_available() else "cpu"
-    model.to(device)
-
-    pipe = pipeline(
-        "text-generation",
-        model=model,
-        tokenizer=tokenizer,
-        device=0 if torch.cuda.is_available() else -1,
-        max_new_tokens=250,
-        temperature=0.7,
-        do_sample=True,
-    )
-
-    # Question answering function
     def ask_question(question, chat_history):
 
         retrieved_docs = vectorstore.similarity_search(question, k=5)
@@ -75,12 +57,12 @@ def create_qa_system(file_path, file_type):
             history_text += f"User: {q}\nAssistant: {a}\n"
 
         prompt = f"""
-<|system|>
 You are a helpful AI assistant.
-Answer clearly in at least two full paragraphs.
-Use only the given context.
-If answer not found, say clearly.
-<|user|>
+
+Use ONLY the context below to answer.
+If the answer is not found, say:
+"I could not find the answer in the document."
+
 Previous Conversation:
 {history_text}
 
@@ -89,16 +71,17 @@ Context:
 
 Question:
 {question}
-<|assistant|>
+
+Answer:
 """
 
-        result = pipe(prompt)
-        full_output = result[0]["generated_text"]
+        response = client.text_generation(
+            prompt,
+            max_new_tokens=300,
+            temperature=0.7,
+        )
 
-        if "<|assistant|>" in full_output:
-            answer = full_output.split("<|assistant|>")[-1].strip()
-        else:
-            answer = full_output.strip()
+        answer = response.strip()
 
         return answer, retrieved_docs
 
